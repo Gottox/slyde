@@ -1,0 +1,45 @@
+{
+  "uuid": "e339417d-377a-4aec-bd02-99fd07ad79a8",
+  "shortName": "slydes",
+  "longName": "slydes",
+  "companyName": "Gottox",
+  "versionLabel": "1.0",
+  "sdkVersion": "3",
+  "targetPlatforms": [ "basalt", "chalk"],
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {
+    "SlyCmd": 0,
+    "SlySlideCount": 11,
+    "SlySlideNmbr": 12,
+    "SlySlideTitle": 13,
+    "SlySlideNotes": 14,
+    "SlyConnected": 15,
+    "SlyToken": 16
+  },
+  "resources": {
+    "media": [
+      {
+        "type": "png",
+        "name": "PLAY",
+        "file": "images/play.png"
+      },
+      {
+        "type": "png",
+        "name": "PAUSE",
+        "file": "images/pause.png"
+      },
+      {
+        "type": "png",
+        "name": "LEFT",
+        "file": "images/left.png"
+      },
+      {
+        "type": "png",
+        "name": "RIGHT",
+        "file": "images/right.png"
+      }
+    ]
+  }
+}
