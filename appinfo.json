@@ -1,11 +1,11 @@
 {
   "uuid": "e339417d-377a-4aec-bd02-99fd07ad79a8",
-  "shortName": "slydes",
-  "longName": "slydes",
+  "shortName": "Slyde",
+  "longName": "Slyde",
   "companyName": "Gottox",
   "versionLabel": "1.0",
   "sdkVersion": "3",
-  "targetPlatforms": [ "basalt", "chalk"],
+  "targetPlatforms": [ "aplite", "basalt", "chalk" ],
   "watchapp": {
     "watchface": false
   },

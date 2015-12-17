@@ -5,7 +5,10 @@ static Window *controlwin;
 static Window *pairwin;
 static ActionBarLayer *action_bar;
 static TextLayer *timertxt;
+static TextLayer *nexttxt;
+static TextLayer *titletxt;
 static TextLayer *tokentxt;
+static TextLayer *infotxt;
 static GBitmap *image_actionbar_play;
 static GBitmap *image_actionbar_pause;
 static GBitmap *image_actionbar_left;
@@ -15,9 +18,15 @@ static AppSync controlSync;
 static uint8_t controlSyncBuf[1024];
 static AppSync pairSync;
 static uint8_t pairSyncBuf[1024];
-static int32_t timer = 0;
+static uint16_t timer = 0;
 static bool timerrun = false;
 
+#if defined(PBL_COLOR)
+#define HIGHLIGHT_COLOR GColorOrange
+#elif defined(PBL_BW)
+#define HIGHLIGHT_COLOR GColorBlack
+#define action_bar_layer_set_icon_animated(a, b, c, d) action_bar_layer_set_icon(a, b, c)
+#endif
 
 enum {
 	SlyCmd = 0,
@@ -49,9 +58,16 @@ static void updateTimer(struct tm *tick_time, TimeUnits units_changed) {
 	static char timeStr[16];
 	if(tick_time != NULL) {
 		timer++;
+
+		// Reset the timer once it hits 100 Minutes
+		if(timer % 6000 == 0)
+			timer = 0;
+
+		// short pulse every 5 minutes
+		if(timer % (60 * 5) == 0)
+			vibes_short_pulse();
 	}
-	snprintf(timeStr, sizeof timeStr, "%02ld : %02ld", (timer / 60) % 100, timer % 60);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "time %s", timeStr);
+	snprintf(timeStr, sizeof timeStr, "%02d : %02d", timer / 60, timer % 60);
 	text_layer_set_text(timertxt, timeStr);
 }
 
@@ -95,9 +111,9 @@ static void right_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
-  window_single_click_subscribe(BUTTON_ID_UP, left_click_handler);
-  window_single_click_subscribe(BUTTON_ID_DOWN, right_click_handler);
 	window_long_click_subscribe(BUTTON_ID_SELECT, 500, select_click_handler_long, NULL);
+	window_single_repeating_click_subscribe(BUTTON_ID_UP, 250, left_click_handler);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 250, right_click_handler);
 }
 
 static void sync_changed_handler(const uint32_t key, const Tuple *new_tuple, const Tuple *old_tuple, void *context) {
@@ -107,12 +123,15 @@ static void sync_changed_handler(const uint32_t key, const Tuple *new_tuple, con
 		break;
 	case SlySlideNmbr:
 		progressbar_layer_set_progress(progress, new_tuple->value->int32);
+		startTimer();
 		break;
 	case SlySlideTitle:
+		layer_set_hidden(text_layer_get_layer(nexttxt), new_tuple->value->cstring[0] == 0);
+		text_layer_set_text(titletxt, new_tuple->value->cstring);
 		break;
 	case SlyToken:
 		if(new_tuple->value->cstring[0] == 0)
-			text_layer_set_text(tokentxt, "Loading...");
+			text_layer_set_text(tokentxt, "****");
 		else
 			text_layer_set_text(tokentxt, new_tuple->value->cstring);
 		break;
@@ -134,28 +153,45 @@ static void controlwin_load(Window *window) {
 	Tuplet initial_values[] = {
 		TupletInteger(SlySlideCount, 100),
 		TupletInteger(SlySlideNmbr, 50),
-		TupletCString(SlySlideTitle, "foobar"),
+		TupletCString(SlySlideTitle, ""),
 		TupletInteger(SlyConnected, 1),
 	};
 
 	Layer *window_layer = window_get_root_layer(window);
 	GRect bounds = layer_get_bounds(window_layer);
 	bounds.size.w -= ACTION_BAR_WIDTH;
-	timertxt = text_layer_create(GRect(0, 0, bounds.size.w, 34));
+	progress = progressbar_layer_create(GRect(2, bounds.size.h - 8 - 34, bounds.size.w - 4, 8));
+	progressbar_layer_set_foreground(progress, HIGHLIGHT_COLOR);
+	layer_add_child(window_layer, progressbar_layer_get_layer(progress));
+
+	timertxt = text_layer_create(GRect(0, bounds.size.h - 34, bounds.size.w, 34));
 	text_layer_set_text_color(timertxt, GColorBlack);
 	text_layer_set_font(timertxt, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
 	text_layer_set_text_alignment(timertxt, GTextAlignmentCenter);
-	text_layer_set_background_color(timertxt, GColorOrange);
+	text_layer_set_background_color(timertxt, GColorClear);
 	resetTimer();
 	layer_add_child(window_layer, text_layer_get_layer(timertxt));
 
-	progress = progressbar_layer_create(GRect(0, bounds.size.h - 16, bounds.size.w, 16));
-	progressbar_layer_set_foreground(progress, GColorOrange);
-	layer_add_child(window_layer, progressbar_layer_get_layer(progress));
+	nexttxt = text_layer_create(GRect(0, 0, bounds.size.w, 16));
+	text_layer_set_text_color(nexttxt, GColorBlack);
+	//text_layer_set_font(nexttxt, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+	text_layer_set_text_alignment(nexttxt, GTextAlignmentLeft);
+	text_layer_set_text(nexttxt, "next:");
+	text_layer_set_background_color(nexttxt, GColorClear);
+	layer_add_child(window_layer, text_layer_get_layer(nexttxt));
+
+	titletxt = text_layer_create(GRect(0, 16, bounds.size.w, bounds.size.h - 8 - 34 - 16));
+	text_layer_set_text_color(titletxt, GColorBlack);
+	text_layer_set_font(titletxt, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+	text_layer_set_text_alignment(titletxt, GTextAlignmentCenter);
+	text_layer_set_background_color(titletxt, GColorClear);
+	layer_add_child(window_layer, text_layer_get_layer(titletxt));
 
 	app_sync_init(&controlSync, controlSyncBuf, sizeof(controlSyncBuf),
 			initial_values, ARRAY_LENGTH(initial_values),
 			sync_changed_handler, sync_error_handler, NULL);
+	light_enable(true);
+	vibes_double_pulse();
 }
 
 static void controlwin_unload(Window *window) {
@@ -163,6 +199,7 @@ static void controlwin_unload(Window *window) {
 	app_sync_deinit(&controlSync);
 	resetTimer();
 	sendcmd("disconnect");
+	light_enable(false);
 }
 
 static void pairwin_load(Window *window) {
@@ -173,11 +210,19 @@ static void pairwin_load(Window *window) {
 
 	Layer *window_layer = window_get_root_layer(window);
 	GRect bounds = layer_get_bounds(window_layer);
-	tokentxt = text_layer_create(GRect(0, 60, bounds.size.w, 32));
+	tokentxt = text_layer_create(GRect(0, 30, bounds.size.w, 60));
 	text_layer_set_text_color(tokentxt, GColorBlack);
-	text_layer_set_font(tokentxt, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+	text_layer_set_font(tokentxt, fonts_get_system_font(FONT_KEY_ROBOTO_CONDENSED_21));
 	text_layer_set_text_alignment(tokentxt, GTextAlignmentCenter);
 	layer_add_child(window_layer, text_layer_get_layer(tokentxt));
+
+	infotxt = text_layer_create(GRect(0, 93, bounds.size.w, 30));
+	text_layer_set_text_color(infotxt, GColorBlack);
+	//text_layer_set_font(infotxt, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+	text_layer_set_text_alignment(infotxt, GTextAlignmentCenter);
+	text_layer_set_overflow_mode(infotxt, GTextOverflowModeWordWrap);
+	text_layer_set_text(infotxt, "more infos at: http://slyde.tox.ninja/");
+	layer_add_child(window_layer, text_layer_get_layer(infotxt));
 
 	app_sync_init(&pairSync, pairSyncBuf, sizeof(pairSyncBuf),
 			initial_values, ARRAY_LENGTH(initial_values),
